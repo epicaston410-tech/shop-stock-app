@@ -3,11 +3,40 @@ import pandas as pd
 import streamlit as st
 from supabase import create_client
 
-# ตั้งค่าหน้าตาแอป
+# 1. ปรับ Layout เป็น centered เพื่อให้เหมาะกับจอมือถือ และพับ Sidebar อัตโนมัติ
 st.set_page_config(
     page_title="ระบบสต็อก & สรุปกำไรแบ่งหุ้นส่วน",
     page_icon="🏪",
-    layout="wide",
+    layout="centered",  # ปรับจาก wide เป็น centered
+    initial_sidebar_state="collapsed",  # ซ่อนเมนูด้านข้างอัตโนมัติในมือถือ
+)
+
+# 2. ใส่ CSS ปรับขนาดตัวอักษรและระยะห่างสำหรับจอมือถือ
+st.markdown(
+    """
+    <style>
+    /* ปรับขนาดหัวข้อใหญ่ให้พอดีจอมือถือ */
+    h1 {
+        font-size: 1.5rem !important;
+        padding-top: 0rem !important;
+    }
+    h2, h3 {
+        font-size: 1.2rem !important;
+    }
+    /* ปรับระยะขอบหน้าจอให้อ่านง่าย */
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
+        padding-left: 0.8rem !important;
+        padding-right: 0.8rem !important;
+    }
+    /* ซ่อน Header/Toolbar ที่ไม่จำเป็นของ Streamlit */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    </style>
+""",
+    unsafe_allow_html=True,
 )
 
 
