@@ -7,7 +7,7 @@ from supabase import create_client
 # SETUP & MOBILE CONFIG
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="ระบบสต็อก & กำไร",
+    page_title="ระบบสต็อก",
     page_icon="🏪",
     layout="centered",
     initial_sidebar_state="collapsed",
@@ -56,7 +56,7 @@ def init_supabase():
 
 supabase = init_supabase()
 
-st.title("🏪 ระบบสต็อก & สรุปกำไรแบ่งหุ้นส่วน")
+st.title("🏪 ระบบสต็อก")
 st.caption("ข้อมูลบันทึกถาวรบน Supabase | ตัดสต็อก FIFO")
 
 # ---------------------------------------------------------
@@ -415,7 +415,7 @@ with tab4:
     # จัดรูปแบบตัวเลขให้เป็นจำนวนเต็ม
     display_df["จำนวนรับเข้า"] = display_df["จำนวนรับเข้า"].astype(int)
     display_df["จำนวนคงเหลือ"] = display_df["จำนวนคงเหลือ"].astype(int)
-    display_df["ซื้อจากไหน"] = display_df["ซื้อจากไหน"].fillna("-")
+    display_df["ซื้อจาก"] = display_df["ซื้อจาก"].fillna("-")
 
     st.dataframe(display_df, use_container_width=True, hide_index=True)
   else:
