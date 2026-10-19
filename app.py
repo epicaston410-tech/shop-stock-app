@@ -362,7 +362,7 @@ with tab3:
           }).execute()
 
           st.toast(f"✅ เพิ่มสินค้า '{new_p_name}' แล้ว!", icon="✨")
-          st.success(f"เพิ่มสินค้า '{new_p_name}' เรียบร้อยแล้ว (ฟอร์มล้างค่าว่างพร้อมบันทึกต่อ)")
+          st.success(f"เพิ่มสินค้า '{new_p_name}' เรียบร้อยแล้ว")
           st.rerun()
 
     st.markdown("---")
@@ -373,7 +373,6 @@ with tab3:
         col_name, col_del = st.columns([3, 1])
         col_name.write(f"• **{p['product_name']}** ({p['unit']}) - {p['selling_price']}บ.")
         if col_del.button("🗑️ ลบ", key=f"del_{p['product_id']}", use_container_width=True):
-          # ลบออกจาก Supabase
           supabase.table("products").delete().eq("product_id", p["product_id"]).execute()
           st.toast(f"ลบ {p['product_name']} แล้ว", icon="🗑️")
           st.rerun()
@@ -393,10 +392,8 @@ with tab4:
     lots_df = pd.DataFrame(lots_res.data)
     prods_df = pd.DataFrame(prods_res.data)
 
-    # รวมตารางเอาชื่อสินค้ามาแสดง
     merged = pd.merge(lots_df, prods_df, on="product_id", how="left")
 
-    # เลือกเฉพาะคอลัมน์ที่ต้องการ: ชื่อสินค้า, จำนวนรับเข้า, จำนวนคงเหลือ, หน่วย
     display_df = merged[[
         "product_name",
         "total_qty",
@@ -411,15 +408,9 @@ with tab4:
         "หน่วย",
     ]
 
-    # แปลงตัวเลขให้เป็นจำนวนเต็ม
     display_df["จำนวนรับเข้า"] = display_df["จำนวนรับเข้า"].astype(int)
     display_df["จำนวนคงเหลือ"] = display_df["จำนวนคงเหลือ"].astype(int)
 
     st.dataframe(display_df, use_container_width=True, hide_index=True)
-  else:
-    st.info("ยังไม่มีข้อมูลสต็อกสินค้า")
-
-    merged = pd.merge(lots_df, prods_df, on="product_id", how="left")
-    st.dataframe(merged, use_container_width=True)
   else:
     st.info("ยังไม่มีข้อมูลสต็อกสินค้า")
