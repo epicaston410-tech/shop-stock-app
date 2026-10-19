@@ -384,7 +384,7 @@ with tab3:
 # TAB 4: ดูสต็อกสินค้าคงเหลือ
 # ---------------------------------------------------------
 with tab4:
-  st.subheader("📦 สต็อกสินค้าคงเหลือแยกล็อต")
+  st.subheader("📦 สต็อกสินค้าคงเหลือ")
 
   lots_res = supabase.table("stock_lots").select("*").execute()
   prods_res = supabase.table("products").select("*").execute()
@@ -392,6 +392,32 @@ with tab4:
   if lots_res.data and prods_res.data:
     lots_df = pd.DataFrame(lots_res.data)
     prods_df = pd.DataFrame(prods_res.data)
+
+    # รวมตารางเอาชื่อสินค้ามาแสดง
+    merged = pd.merge(lots_df, prods_df, on="product_id", how="left")
+
+    # เลือกเฉพาะคอลัมน์ที่ต้องการ: ชื่อสินค้า, จำนวนรับเข้า, จำนวนคงเหลือ, หน่วย
+    display_df = merged[[
+        "product_name",
+        "total_qty",
+        "remaining_qty",
+        "unit",
+    ]].copy()
+
+    display_df.columns = [
+        "ชื่อสินค้า",
+        "จำนวนรับเข้า",
+        "จำนวนคงเหลือ",
+        "หน่วย",
+    ]
+
+    # แปลงตัวเลขให้เป็นจำนวนเต็ม
+    display_df["จำนวนรับเข้า"] = display_df["จำนวนรับเข้า"].astype(int)
+    display_df["จำนวนคงเหลือ"] = display_df["จำนวนคงเหลือ"].astype(int)
+
+    st.dataframe(display_df, use_container_width=True, hide_index=True)
+  else:
+    st.info("ยังไม่มีข้อมูลสต็อกสินค้า")
 
     merged = pd.merge(lots_df, prods_df, on="product_id", how="left")
     st.dataframe(merged, use_container_width=True)
