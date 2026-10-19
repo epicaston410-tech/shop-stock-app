@@ -7,7 +7,7 @@ from supabase import create_client
 # SETUP & MOBILE CONFIG
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="ระบบสต็อก",
+    page_title="ระบบสต็อก & กำไร",
     page_icon="🏪",
     layout="centered",
     initial_sidebar_state="collapsed",
@@ -56,7 +56,7 @@ def init_supabase():
 
 supabase = init_supabase()
 
-st.title("🏪 ระบบสต็อก")
+st.title("🏪 ระบบสต็อก & สรุปกำไรแบ่งหุ้นส่วน")
 st.caption("ข้อมูลบันทึกถาวรบน Supabase | ตัดสต็อก FIFO")
 
 # ---------------------------------------------------------
@@ -286,7 +286,7 @@ with tab2:
           }).execute()
 
           st.toast(f"✅ บันทึกขาย {sale_item_name} สำเร็จ!", icon="🎉")
-          st.success(f"บันทึกขาย {sale_item_name} เรียบร้อยแล้ว (รีเซ็ตหน้าจอแล้ว)")
+          st.success(f"บันทึกขาย {sale_item_name} เรียบร้อยแล้ว")
           st.rerun()
 
 # ---------------------------------------------------------
@@ -302,43 +302,43 @@ with tab3:
     if not prods:
       st.warning("กรุณาเพิ่มชื่อสินค้าใหม่ก่อน")
     else:
-      with st.form("add_lot_form", clear_on_submit=True):
-        prod_names = [p["product_name"] for p in prods]
-        p_name = st.selectbox("เลือกสินค้า", prod_names)
+      # เอา st.form ออกเพื่อให้คำนวณราคาทุนต่อหน่วยแบบเรียลไทม์ทันทีที่พิมพ์
+      prod_names = [p["product_name"] for p in prods]
+      p_name = st.selectbox("เลือกสินค้า", prod_names)
 
-        buy_date = st.date_input("วันที่รับเข้า", datetime.date.today())
-        supplier = st.text_input("แหล่งซื้อ", "")
+      buy_date = st.date_input("วันที่รับเข้า", datetime.date.today())
+      supplier = st.text_input("แหล่งซื้อ", "")
 
-        col_c, col_d = st.columns(2)
-        tot_price = col_c.number_input("ราคารวม (บาท)", min_value=0.0, value=0.0, step=10.0)
-        tot_qty = col_d.number_input("จำนวนที่ได้", min_value=1, value=1)
+      col_c, col_d = st.columns(2)
+      tot_price = col_c.number_input("ราคารวม (บาท)", min_value=0.0, value=0.0, step=10.0)
+      tot_qty = col_d.number_input("จำนวนที่ได้", min_value=1, value=1)
 
-        calculated_unit_cost = tot_price / tot_qty if tot_qty > 0 else 0.0
-        st.info(f"💡 ทุนต่อหน่วย = **฿{calculated_unit_cost:,.2f}** บาท")
+      calculated_unit_cost = tot_price / tot_qty if tot_qty > 0 else 0.0
+      st.info(f"💡 ทุนต่อหน่วย = **฿{calculated_unit_cost:,.2f}** บาท")
 
-        btn_add_lot = st.form_submit_button("บันทึกเข้าสต็อก", use_container_width=True)
+      btn_add_lot = st.button("บันทึกเข้าสต็อก", type="primary", use_container_width=True)
 
-        if btn_add_lot:
-          if tot_price <= 0:
-            st.error("กรุณากรอกราคารวมที่ซื้อมาด้วยครับ")
-          else:
-            p_id = [p["product_id"] for p in prods if p["product_name"] == p_name][0]
-            lot_id = f"LOT-{int(datetime.datetime.now().timestamp())}"
+      if btn_add_lot:
+        if tot_price <= 0:
+          st.error("กรุณากรอกราคารวมที่ซื้อมาด้วยครับ")
+        else:
+          p_id = [p["product_id"] for p in prods if p["product_name"] == p_name][0]
+          lot_id = f"LOT-{int(datetime.datetime.now().timestamp())}"
 
-            supabase.table("stock_lots").insert({
-                "lot_id": lot_id,
-                "product_id": p_id,
-                "buy_date": str(buy_date),
-                "supplier": supplier,
-                "total_price": tot_price,
-                "total_qty": tot_qty,
-                "unit_cost": calculated_unit_cost,
-                "remaining_qty": tot_qty,
-            }).execute()
+          supabase.table("stock_lots").insert({
+              "lot_id": lot_id,
+              "product_id": p_id,
+              "buy_date": str(buy_date),
+              "supplier": supplier,
+              "total_price": tot_price,
+              "total_qty": tot_qty,
+              "unit_cost": calculated_unit_cost,
+              "remaining_qty": tot_qty,
+          }).execute()
 
-            st.toast(f"✅ เพิ่มสต็อก {p_name} สำเร็จ!", icon="📦")
-            st.success(f"บันทึกรับสต็อก {p_name} จำนวน {tot_qty} หน่วย เรียบร้อยแล้ว")
-            st.rerun()
+          st.toast(f"✅ เพิ่มสต็อก {p_name} สำเร็จ!", icon="📦")
+          st.success(f"บันทึกรับสต็อก {p_name} จำนวน {tot_qty} หน่วย เรียบร้อยแล้ว")
+          st.rerun()
 
   with sub_tab2:
     st.markdown("##### ➕ เพิ่มชื่อสินค้าใหม่")
@@ -392,10 +392,8 @@ with tab4:
     lots_df = pd.DataFrame(lots_res.data)
     prods_df = pd.DataFrame(prods_res.data)
 
-    # รวมตารางเอาชื่อสินค้ามาแสดง
     merged = pd.merge(lots_df, prods_df, on="product_id", how="left")
 
-    # เลือกคอลัมน์: ชื่อสินค้า, ราคาทุน/หน่วย, แหล่งซื้อ, จำนวนรับเข้า, จำนวนคงเหลือ, หน่วย
     display_df = merged[[
         "product_name",
         "unit_cost",
@@ -408,17 +406,16 @@ with tab4:
     display_df.columns = [
         "ชื่อสินค้า",
         "ทุน/หน่วย",
-        "ซื้อจาก",
+        "ซื้อจากไหน",
         "จำนวนรับเข้า",
         "จำนวนคงเหลือ",
         "หน่วย",
     ]
 
-    # จัดรูปแบบตัวเลขให้อ่านง่าย
     display_df["ทุน/หน่วย"] = display_df["ทุน/หน่วย"].map("฿{:,.2f}".format)
     display_df["จำนวนรับเข้า"] = display_df["จำนวนรับเข้า"].astype(int)
     display_df["จำนวนคงเหลือ"] = display_df["จำนวนคงเหลือ"].astype(int)
-    display_df["ซื้อจาก"] = display_df["ซื้อจาก"].fillna("-")
+    display_df["ซื้อจากไหน"] = display_df["ซื้อจากไหน"].fillna("-")
 
     st.dataframe(display_df, use_container_width=True, hide_index=True)
   else:
