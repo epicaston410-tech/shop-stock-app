@@ -7,7 +7,7 @@ from supabase import create_client
 # SETUP & MOBILE CONFIG
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="ระบบสต็อก & กำไร",
+    page_title="ระบบสต็อก",
     page_icon="🏪",
     layout="centered",
     initial_sidebar_state="collapsed",
@@ -56,7 +56,7 @@ def init_supabase():
 
 supabase = init_supabase()
 
-st.title("🏪 ระบบสต็อก & สรุปกำไรแบ่งหุ้นส่วน")
+st.title("🏪 ระบบสต็อก")
 st.caption("ข้อมูลบันทึกถาวรบน Supabase | ตัดสต็อก FIFO")
 
 # ---------------------------------------------------------
@@ -72,6 +72,7 @@ tab1, tab2, tab3, tab4 = st.tabs(
 with tab1:
   st.subheader("💰 สรุปงวดปัจจุบัน (ยังไม่ตัดรอบ)")
 
+  # คำนวณยอดขาย/กำไรในงวดปัจจุบัน
   response = (
       supabase.table("sales").select("*").eq("settled", False).execute()
   )
@@ -95,13 +96,23 @@ with tab1:
   )
   profit_per_person = net_profit / 2.0
 
+  # คำนวณมูลค่าเงินลงทุนคงเหลือในสต็อกทั้งหมด
+  lots_res = supabase.table("stock_lots").select("*").gt("remaining_qty", 0).execute()
+  lots_data = lots_res.data if lots_res.data else []
+  stock_inventory_value = sum(
+      float(lot["remaining_qty"]) * float(lot["unit_cost"]) for lot in lots_data
+  )
+
   c1, c2 = st.columns(2)
-  c1.metric("ยอดขายรวม", f"฿{total_sales:,.2f}")
-  c2.metric("ต้นทุนรวม", f"฿{total_cost:,.2f}")
+  c1.metric("ยอดขายรวมงวดนี้", f"฿{total_sales:,.2f}")
+  c2.metric("ต้นทุนขายรวมงวดนี้", f"฿{total_cost:,.2f}")
 
   c3, c4 = st.columns(2)
-  c3.metric("กำไรสุทธิ", f"฿{net_profit:,.2f}")
+  c3.metric("กำไรสุทธิงวดนี้", f"฿{net_profit:,.2f}")
   c4.metric("แบ่งคนละ (50%)", f"฿{profit_per_person:,.2f}")
+
+  st.markdown("---")
+  st.metric("📦 มูลค่าสินค้าคงเหลือในสต็อก (เงินลงทุนในสต็อก)", f"฿{stock_inventory_value:,.2f}")
 
   st.markdown("---")
 
@@ -302,7 +313,6 @@ with tab3:
     if not prods:
       st.warning("กรุณาเพิ่มชื่อสินค้าใหม่ก่อน")
     else:
-      # เอา st.form ออกเพื่อให้คำนวณราคาทุนต่อหน่วยแบบเรียลไทม์ทันทีที่พิมพ์
       prod_names = [p["product_name"] for p in prods]
       p_name = st.selectbox("เลือกสินค้า", prod_names)
 
@@ -394,6 +404,13 @@ with tab4:
 
     merged = pd.merge(lots_df, prods_df, on="product_id", how="left")
 
+    # คำนวณมูลค่าคงเหลือของแต่ละล็อต
+    merged["tot_remaining_value"] = merged["remaining_qty"] * merged["unit_cost"]
+    total_inventory_val = merged["tot_remaining_value"].sum()
+
+    st.metric("💰 มูลค่าเงินลงทุนสินค้าคงเหลือรวม", f"฿{total_inventory_val:,.2f}")
+    st.markdown("---")
+
     display_df = merged[[
         "product_name",
         "unit_cost",
@@ -406,7 +423,7 @@ with tab4:
     display_df.columns = [
         "ชื่อสินค้า",
         "ทุน/หน่วย",
-        "ซื้อจากไหน",
+        "ซื้อจาก",
         "จำนวนรับเข้า",
         "จำนวนคงเหลือ",
         "หน่วย",
@@ -415,7 +432,7 @@ with tab4:
     display_df["ทุน/หน่วย"] = display_df["ทุน/หน่วย"].map("฿{:,.2f}".format)
     display_df["จำนวนรับเข้า"] = display_df["จำนวนรับเข้า"].astype(int)
     display_df["จำนวนคงเหลือ"] = display_df["จำนวนคงเหลือ"].astype(int)
-    display_df["ซื้อจากไหน"] = display_df["ซื้อจากไหน"].fillna("-")
+    display_df["ซื้อจาก"] = display_df["ซื้อจาก"].fillna("-")
 
     st.dataframe(display_df, use_container_width=True, hide_index=True)
   else:
