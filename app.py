@@ -3,37 +3,41 @@ import pandas as pd
 import streamlit as st
 from supabase import create_client
 
-# 1. ปรับ Layout เป็น centered เพื่อให้เหมาะกับจอมือถือ และพับ Sidebar อัตโนมัติ
+# ---------------------------------------------------------
+# SETUP & MOBILE CONFIG
+# ---------------------------------------------------------
 st.set_page_config(
-    page_title="ระบบสต็อก & สรุปกำไรแบ่งหุ้นส่วน",
+    page_title="ระบบสต็อก & กำไร",
     page_icon="🏪",
-    layout="centered",  # ปรับจาก wide เป็น centered
-    initial_sidebar_state="collapsed",  # ซ่อนเมนูด้านข้างอัตโนมัติในมือถือ
+    layout="centered",
+    initial_sidebar_state="collapsed",
 )
 
-# 2. ใส่ CSS ปรับขนาดตัวอักษรและระยะห่างสำหรับจอมือถือ
+# Custom CSS สำหรับให้แสดงผลพอดีจอมือถือ
 st.markdown(
     """
     <style>
-    /* ปรับขนาดหัวข้อใหญ่ให้พอดีจอมือถือ */
-    h1 {
-        font-size: 1.5rem !important;
-        padding-top: 0rem !important;
-    }
-    h2, h3 {
-        font-size: 1.2rem !important;
-    }
-    /* ปรับระยะขอบหน้าจอให้อ่านง่าย */
     .block-container {
         padding-top: 1rem !important;
-        padding-bottom: 1rem !important;
+        padding-bottom: 2rem !important;
         padding-left: 0.8rem !important;
         padding-right: 0.8rem !important;
     }
-    /* ซ่อน Header/Toolbar ที่ไม่จำเป็นของ Streamlit */
-    #MainMenu {visibility: hidden;}
+    h1 { font-size: 1.4rem !important; margin-bottom: 0.2rem !important; }
+    h2, h3 { font-size: 1.1rem !important; }
+    
+    /* สไตล์ปุ่มแท็บเลือกเมนูด้านบน */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 4px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        padding-left: 8px;
+        padding-right: 8px;
+        font-size: 0.85rem;
+    }
+    
+    /* ซ่อนแถบฟุตเตอร์ที่ไม่จำเป็น */
     footer {visibility: hidden;}
-    header {visibility: hidden;}
     </style>
 """,
     unsafe_allow_html=True,
@@ -52,32 +56,22 @@ def init_supabase():
 
 supabase = init_supabase()
 
-st.title("🏪 ระบบจัดการสต็อกสินค้า & สรุปกำไรแบ่งหุ้นส่วน")
-st.caption(
-    "เชื่อมต่อฐานข้อมูลถาวร Supabase + ตัดสต็อก FIFO + ตัดงวดปันผล 50/50"
-)
-st.markdown("---")
+st.title("🏪 ระบบสต็อก & สรุปกำไรแบ่งหุ้นส่วน")
+st.caption("ข้อมูลบันทึกถาวรบน Supabase | ตัดสต็อก FIFO")
 
 # ---------------------------------------------------------
-# 2. SIDEBAR MENU
+# 2. MAIN NAVIGATION (ใช้ TABS แทน Sidebar สำหรับจอมือถือ)
 # ---------------------------------------------------------
-menu = st.sidebar.selectbox(
-    "📌 เลือกเมนูการทำงาน",
-    [
-        "💰 สรุปงวดกำไร & แบ่งปันผล",
-        "🛒 บันทึกการขายหน้าร้าน",
-        "📥 บันทึกรับสินค้าเข้าสต็อก (แยกล็อต)",
-        "📦 ดูสต็อกสินค้าคงเหลือ",
-    ],
+tab1, tab2, tab3, tab4 = st.tabs(
+    ["💰 สรุปกำไร", "🛒 บันทึกขาย", "📥 รับสต็อก", "📦 ดูสต็อก"]
 )
 
 # ---------------------------------------------------------
-# 3. MENU 1: สรุปงวดกำไร & แบ่งปันผล
+# TAB 1: สรุปงวดกำไร & แบ่งปันผล
 # ---------------------------------------------------------
-if menu == "💰 สรุปงวดกำไร & แบ่งปันผล":
-  st.subheader("💰 สรุปผลประกอบการงวดปัจจุบัน (ยังไม่ได้ตัดรอบแบ่งกำไร)")
+with tab1:
+  st.subheader("💰 สรุปงวดปัจจุบัน (ยังไม่ตัดรอบ)")
 
-  # ดึงข้อมูลการขายที่ยังไม่ได้ตัดรอบ (settled = False)
   response = (
       supabase.table("sales").select("*").eq("settled", False).execute()
   )
@@ -101,64 +95,51 @@ if menu == "💰 สรุปงวดกำไร & แบ่งปันผล
   )
   profit_per_person = net_profit / 2.0
 
-  # แสดงตัวเลขสรุป
-  c1, c2, c3, c4 = st.columns(4)
-  c1.metric("ยอดขายรวมงวดนี้", f"฿{total_sales:,.2f}")
-  c2.metric("ต้นทุนรวมงวดนี้", f"฿{total_cost:,.2f}")
-  c3.metric("กำไรสุทธิรวม", f"฿{net_profit:,.2f}")
-  c4.metric(
-      "แบ่งปันผล (คนละ 50%)",
-      f"฿{profit_per_person:,.2f}",
-      delta_color="normal",
-  )
+  c1, c2 = st.columns(2)
+  c1.metric("ยอดขายรวม", f"฿{total_sales:,.2f}")
+  c2.metric("ต้นทุนรวม", f"฿{total_cost:,.2f}")
+
+  c3, c4 = st.columns(2)
+  c3.metric("กำไรสุทธิ", f"฿{net_profit:,.2f}")
+  c4.metric("แบ่งคนละ (50%)", f"฿{profit_per_person:,.2f}")
 
   st.markdown("---")
 
-  col_btn, col_txt = st.columns([1, 3])
-  with col_btn:
-    if st.button("🔘 กดสรุป & ตัดรอบแบ่งกำไร", type="primary"):
-      if current_sales.empty:
-        st.warning("ยังไม่มีรายการขายในงวดนี้ ไม่สามารถตัดรอบได้")
-      else:
-        # 1. บันทึกประวัติการตัดรอบลงตาราง settlements
-        settle_id = f"SETTL-{int(datetime.datetime.now().timestamp())}"
-        now_str = datetime.datetime.now().isoformat()
+  if st.button("🔘 กดสรุป & ตัดรอบแบ่งกำไร", type="primary", use_container_width=True):
+    if current_sales.empty:
+      st.warning("ยังไม่มีรายการขายในงวดนี้")
+    else:
+      settle_id = f"SETTL-{int(datetime.datetime.now().timestamp())}"
+      now_str = datetime.datetime.now().isoformat()
 
-        supabase.table("settlements").insert({
-            "settlement_id": settle_id,
-            "settle_date": now_str,
-            "total_sales": total_sales,
-            "total_cost": total_cost,
-            "net_profit": net_profit,
-            "profit_per_partner": profit_per_person,
-        }).execute()
+      supabase.table("settlements").insert({
+          "settlement_id": settle_id,
+          "settle_date": now_str,
+          "total_sales": total_sales,
+          "total_cost": total_cost,
+          "net_profit": net_profit,
+          "profit_per_partner": profit_per_person,
+      }).execute()
 
-        # 2. ปรับสถานะรายการขายทั้งหมดในงวดนี้เป็น settled = True
-        supabase.table("sales").update({"settled": True}).eq(
-            "settled", False
-        ).execute()
+      supabase.table("sales").update({"settled": True}).eq(
+          "settled", False
+      ).execute()
 
-        st.balloons()
-        st.success(
-            f"ตัดรอบสำเร็จ! บันทึกยอดปันผลแบ่งคนละ ฿{profit_per_person:,.2f} เรียบร้อยแล้ว สต็อกสินค้าคงเหลือเท่าเดิม และเริ่มนับงวดใหม่ทันที"
-        )
-        st.rerun()
+      st.balloons()
+      st.success(f"ตัดรอบสำเร็จ! แบ่งปันผลคนละ ฿{profit_per_person:,.2f}")
+      st.rerun()
 
-  with col_txt:
-    st.caption(
-        "⚡ หมายเหตุ: การกดปุ่มนี้จะไม่ทำให้จำนวนสต็อกสินค้าลดลง"
-        " แต่จะทำการรีเซ็ตยอดกำไรสะสมเพื่อเริ่มนับ 1 ใหม่ในงวดถัดไป"
-    )
+  st.caption("⚡ การตัดรอบจะรีเซ็ทยอดกำไรเป็น 0 เริ่มนับใหม่ แต่สต็อกสินค้าคงเหลือเท่าเดิม")
 
   st.markdown("---")
-  st.subheader("📋 รายการขายในงวดปัจจุบัน")
+  st.subheader("📋 รายการขายงวดนี้")
   if not current_sales.empty:
     st.dataframe(current_sales, use_container_width=True)
   else:
     st.info("ยังไม่มีรายการขายในงวดปัจจุบัน")
 
   st.markdown("---")
-  st.subheader("📜 ประวัติการตัดรอบแบ่งกำไรย้อนหลัง")
+  st.subheader("📜 ประวัติการตัดรอบย้อนหลัง")
   settle_res = (
       supabase.table("settlements")
       .select("*")
@@ -167,13 +148,11 @@ if menu == "💰 สรุปงวดกำไร & แบ่งปันผล
   )
   if settle_res.data:
     st.dataframe(pd.DataFrame(settle_res.data), use_container_width=True)
-  else:
-    st.info("ยังไม่มีประวัติการตัดรอบแบ่งกำไร")
 
 # ---------------------------------------------------------
-# 4. MENU 2: บันทึกการขายหน้าร้าน (อัปเดตรองรับตัดสต็อกแก้ว)
+# TAB 2: บันทึกการขายหน้าร้าน
 # ---------------------------------------------------------
-elif menu == "🛒 บันทึกการขายหน้าร้าน":
+with tab2:
   st.subheader("🛒 บันทึกรายการขายสินค้า")
 
   prods = supabase.table("products").select("*").execute().data
@@ -187,7 +166,7 @@ elif menu == "🛒 บันทึกการขายหน้าร้าน"
   )
 
   if not prods:
-    st.warning("กรุณาเพิ่มรายการสินค้าในระบบก่อน")
+    st.warning("กรุณาเพิ่มรายการสินค้าก่อน")
   else:
     prods_df = pd.DataFrame(prods)
     lots_df = pd.DataFrame(lots) if lots else pd.DataFrame()
@@ -202,7 +181,6 @@ elif menu == "🛒 บันทึกการขายหน้าร้าน"
     else:
       prods_df["remaining_qty"] = 0
 
-    # ตรวจสอบหาว่ามีสินค้าชื่อ 'แก้วกระดาษ' ในระบบไหม
     cup_prod = prods_df[
         prods_df["product_name"].str.contains("แก้วกระดาษ|แก้ว", na=False)
     ]
@@ -212,11 +190,11 @@ elif menu == "🛒 บันทึกการขายหน้าร้าน"
       prod_options = {
           row[
               "product_name"
-          ]: f"{row['product_name']} (คงเหลือ: {int(row['remaining_qty'])} {row['unit']})"
+          ]: f"{row['product_name']} (เหลือ: {int(row['remaining_qty'])} {row['unit']})"
           for _, row in prods_df.iterrows()
       }
       selected_prod_name = st.selectbox(
-          "เลือกสินค้าหลัก",
+          "เลือกสินค้า",
           options=list(prod_options.keys()),
           format_func=lambda x: prod_options[x],
       )
@@ -231,31 +209,29 @@ elif menu == "🛒 บันทึกการขายหน้าร้าน"
 
       col1, col2 = st.columns(2)
       sell_qty = col1.number_input(
-          f"จำนวนที่ขาย ({unit_name})",
+          f"จำนวน ({unit_name})",
           min_value=1,
           max_value=max(1, available_qty),
           value=1,
       )
       custom_price = col2.number_input(
-          "ราคาขายต่อหน่วย (บาท)", min_value=0.0, value=sell_price
+          "ราคา/หน่วย (บาท)", min_value=0.0, value=sell_price
       )
 
-      # Option เพิ่มเติม: แถมแก้วกระดาษไหม?
       include_cup = False
       if cup_available:
         cup_row = cup_prod.iloc[0]
         cup_rem = int(cup_row["remaining_qty"])
         include_cup = st.checkbox(
-            f"🥤 รับ 'แก้วกระดาษ' ด้วย (+{sell_qty} ใบ) [สต็อกคงเหลือ: {cup_rem} ใบ]"
+            f"🥤 รับ 'แก้วกระดาษ' ด้วย (+{sell_qty} ใบ) [คงเหลือ: {cup_rem} ใบ]"
         )
 
-      btn_submit_sale = st.form_submit_button("💾 บันทึกการขาย", type="primary")
+      btn_submit_sale = st.form_submit_button("💾 บันทึกการขาย", type="primary", use_container_width=True)
 
       if btn_submit_sale:
         if available_qty < sell_qty:
-          st.error(f"สินค้าคงเหลือไม่พอขาย (มีอยู่ {available_qty} {unit_name})")
+          st.error(f"สินค้าคงเหลือไม่พอ (มี {available_qty} {unit_name})")
         else:
-          # ฟังก์ชันตัดสต็อก FIFO แยกรายสินค้า
           def deduct_stock_fifo(prod_id, qty_needed):
             avail_lots = [lot for lot in lots if lot["product_id"] == prod_id]
             used_lots_cost = 0.0
@@ -271,7 +247,6 @@ elif menu == "🛒 บันทึกการขายหน้าร้าน"
               take_qty = min(remaining_to_deduct, lot_rem)
               used_lots_cost += take_qty * unit_cost
 
-              # อัปเดตใน stock_lots
               supabase.table("stock_lots").update(
                   {"remaining_qty": lot_rem - take_qty}
               ).eq("lot_id", lot_id).execute()
@@ -279,16 +254,13 @@ elif menu == "🛒 บันทึกการขายหน้าร้าน"
 
             return used_lots_cost
 
-          # 1. ตัดสต็อกสินค้าหลัก
           main_cost = deduct_stock_fifo(p_id, sell_qty)
 
-          # 2. ถ้ามีตัดสต็อกแก้วกระดาษเพิ่ม
           cup_cost = 0.0
           if include_cup and cup_available:
             cup_p_id = cup_prod.iloc[0]["product_id"]
             cup_cost = deduct_stock_fifo(cup_p_id, sell_qty)
 
-          # 3. บันทึกลงตาราง sales
           tot_sales = sell_qty * custom_price
           tot_cost = main_cost + cup_cost
           net_prof = tot_sales - tot_cost
@@ -313,55 +285,40 @@ elif menu == "🛒 บันทึกการขายหน้าร้าน"
               "settled": False,
           }).execute()
 
-          st.success(
-              f"บันทึกขาย {sale_item_name} จำนวน {sell_qty} {unit_name} เรียบร้อย!"
-          )
+          st.success(f"บันทึกขาย {sale_item_name} สำเร็จ!")
           st.rerun()
 
 # ---------------------------------------------------------
-# 5. MENU 3: บันทึกรับสินค้าเข้าสต็อก (แยกล็อต)
+# TAB 3: บันทึกรับสินค้าเข้าสต็อก
 # ---------------------------------------------------------
-elif menu == "📥 บันทึกรับสินค้าเข้าสต็อก (แยกล็อต)":
-  st.subheader("📥 บันทึกรับสินค้าเข้าสต็อก (ซื้อของมาเติม)")
+with tab3:
+  st.subheader("📥 บันทึกรับสินค้าเข้าสต็อก")
 
-  tab_new_lot, tab_new_product = st.tabs(
-      ["ซื้อของเข้าสต็อก (ล็อตใหม่)", "เพิ่มรายชื่อสินค้าใหม่"]
-  )
+  sub_tab1, sub_tab2 = st.tabs(["ซื้อเข้าสต็อก (ล็อตใหม่)", "เพิ่มชื่อสินค้าใหม่"])
 
-  with tab_new_lot:
+  with sub_tab1:
     prods = supabase.table("products").select("*").execute().data
     if not prods:
-      st.warning("กรุณาเพิ่มสินค้าใหม่ในแท็บ 'เพิ่มรายชื่อสินค้าใหม่' ก่อนครับ")
+      st.warning("กรุณาเพิ่มชื่อสินค้าใหม่ก่อน")
     else:
       with st.form("add_lot_form"):
         prod_names = [p["product_name"] for p in prods]
         p_name = st.selectbox("เลือกสินค้า", prod_names)
 
-        col_a, col_b = st.columns(2)
-        buy_date = col_a.date_input("วันที่ซื้อ/รับเข้า", datetime.date.today())
-        supplier = col_b.text_input(
-            "แหล่งที่ซื้อ (เช่น แม็คโคร, ร้านนอก)", "แม็คโคร"
-        )
+        buy_date = st.date_input("วันที่รับเข้า", datetime.date.today())
+        supplier = st.text_input("แหล่งซื้อ", "แม็คโคร")
 
         col_c, col_d = st.columns(2)
-        tot_price = col_c.number_input(
-            "ราคารวมที่ซื้อมาทั้งหมด (บาท)", min_value=0.0, value=450.0
-        )
-        tot_qty = col_d.number_input(
-            "จำนวนทั้งหมดที่ได้ (ขวด/ซอง/ห่อ/ชิ้น/ใบ)", min_value=1, value=50
-        )
+        tot_price = col_c.number_input("ราคารวม (บาท)", min_value=0.0, value=450.0)
+        tot_qty = col_d.number_input("จำนวนที่ได้", min_value=1, value=50)
 
         calculated_unit_cost = tot_price / tot_qty if tot_qty > 0 else 0.0
-        st.info(
-            f"💡 ต้นทุนต่อหน่วยอัตโนมัติ = **฿{calculated_unit_cost:,.2f}** บาท/หน่วย"
-        )
+        st.info(f"💡 ทุนต่อหน่วย = **฿{calculated_unit_cost:,.2f}** บาท")
 
-        btn_add_lot = st.form_submit_button("บันทึกเข้าสต็อก")
+        btn_add_lot = st.form_submit_button("บันทึกเข้าสต็อก", use_container_width=True)
 
         if btn_add_lot:
-          p_id = [p["product_id"] for p in prods if p["product_name"] == p_name][
-              0
-          ]
+          p_id = [p["product_id"] for p in prods if p["product_name"] == p_name][0]
           lot_id = f"LOT-{int(datetime.datetime.now().timestamp())}"
 
           supabase.table("stock_lots").insert({
@@ -375,22 +332,16 @@ elif menu == "📥 บันทึกรับสินค้าเข้าส�
               "remaining_qty": tot_qty,
           }).execute()
 
-          st.success(
-              f"เพิ่มสต็อก {p_name} จำนวน {tot_qty} หน่วย (ทุน ฿{calculated_unit_cost:,.2f}/หน่วย) สำเร็จ!"
-          )
+          st.success(f"เพิ่มสต็อก {p_name} เรียบร้อย!")
           st.rerun()
 
-  with tab_new_product:
+  with sub_tab2:
     with st.form("add_product_form"):
       new_p_name = st.text_input("ชื่อสินค้าใหม่")
-      new_unit = st.selectbox(
-          "หน่วยนับ", ["ขวด", "ซอง", "ห่อ", "ชิ้น", "กล่อง", "กระป๋อง", "ใบ"]
-      )
-      default_sell_price = st.number_input(
-          "ราคาขายตั้งต้นหน้าร้าน (บาท)", min_value=0.0, value=15.0
-      )
+      new_unit = st.selectbox("หน่วยนับ", ["ขวด", "ซอง", "ห่อ", "ชิ้น", "กล่อง", "ใบ"])
+      default_sell_price = st.number_input("ราคาขายตั้งต้น (บาท)", min_value=0.0, value=15.0)
 
-      btn_add_prod = st.form_submit_button("เพิ่มรายการสินค้า")
+      btn_add_prod = st.form_submit_button("เพิ่มสินค้า", use_container_width=True)
 
       if btn_add_prod and new_p_name:
         new_p_id = f"P-{int(datetime.datetime.now().timestamp())}"
@@ -401,14 +352,14 @@ elif menu == "📥 บันทึกรับสินค้าเข้าส�
             "selling_price": default_sell_price,
         }).execute()
 
-        st.success(f"เพิ่มสินค้าใหม่ '{new_p_name}' เรียบร้อยแล้ว")
+        st.success(f"เพิ่มสินค้า '{new_p_name}' เรียบร้อย")
         st.rerun()
 
 # ---------------------------------------------------------
-# 6. MENU 4: ดูสต็อกสินค้าคงเหลือ
+# TAB 4: ดูสต็อกสินค้าคงเหลือ
 # ---------------------------------------------------------
-elif menu == "📦 ดูสต็อกสินค้าคงเหลือ":
-  st.subheader("📦 รายการสต็อกสินค้าแยกตามล็อตซื้อเข้า")
+with tab4:
+  st.subheader("📦 สต็อกสินค้าคงเหลือแยกล็อต")
 
   lots_res = supabase.table("stock_lots").select("*").execute()
   prods_res = supabase.table("products").select("*").execute()
