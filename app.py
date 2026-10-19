@@ -60,7 +60,7 @@ st.title("🏪 ระบบสต็อก & สรุปกำไรแบ่�
 st.caption("ข้อมูลบันทึกถาวรบน Supabase | ตัดสต็อก FIFO")
 
 # ---------------------------------------------------------
-# 2. MAIN NAVIGATION (ใช้ TABS แทน Sidebar สำหรับจอมือถือ)
+# 2. MAIN NAVIGATION (ใช้ TABS ด้านบน)
 # ---------------------------------------------------------
 tab1, tab2, tab3, tab4 = st.tabs(
     ["💰 สรุปกำไร", "🛒 บันทึกขาย", "📥 รับสต็อก", "📦 ดูสต็อก"]
@@ -186,7 +186,7 @@ with tab2:
     ]
     cup_available = not cup_prod.empty
 
-    with st.form("sale_form"):
+    with st.form("sale_form", clear_on_submit=True):
       prod_options = {
           row[
               "product_name"
@@ -285,7 +285,8 @@ with tab2:
               "settled": False,
           }).execute()
 
-          st.success(f"บันทึกขาย {sale_item_name} สำเร็จ!")
+          st.toast(f"✅ บันทึกขาย {sale_item_name} สำเร็จ!", icon="🎉")
+          st.success(f"บันทึกขาย {sale_item_name} เรียบร้อยแล้ว (รีเซ็ตหน้าจอแล้ว)")
           st.rerun()
 
 # ---------------------------------------------------------
@@ -294,23 +295,23 @@ with tab2:
 with tab3:
   st.subheader("📥 บันทึกรับสินค้าเข้าสต็อก")
 
-  sub_tab1, sub_tab2 = st.tabs(["ซื้อเข้าสต็อก (ล็อตใหม่)", "เพิ่มชื่อสินค้าใหม่"])
+  sub_tab1, sub_tab2 = st.tabs(["ซื้อเข้าสต็อก (ล็อตใหม่)", "เพิ่ม/ลบชื่อสินค้า"])
 
   with sub_tab1:
     prods = supabase.table("products").select("*").execute().data
     if not prods:
       st.warning("กรุณาเพิ่มชื่อสินค้าใหม่ก่อน")
     else:
-      with st.form("add_lot_form"):
+      with st.form("add_lot_form", clear_on_submit=True):
         prod_names = [p["product_name"] for p in prods]
         p_name = st.selectbox("เลือกสินค้า", prod_names)
 
         buy_date = st.date_input("วันที่รับเข้า", datetime.date.today())
-        supplier = st.text_input("แหล่งซื้อ", "แม็คโคร")
+        supplier = st.text_input("แหล่งซื้อ", "")
 
         col_c, col_d = st.columns(2)
-        tot_price = col_c.number_input("ราคารวม (บาท)", min_value=0.0, value=450.0)
-        tot_qty = col_d.number_input("จำนวนที่ได้", min_value=1, value=50)
+        tot_price = col_c.number_input("ราคารวม (บาท)", min_value=0.0, value=0.0, step=10.0)
+        tot_qty = col_d.number_input("จำนวนที่ได้", min_value=1, value=1)
 
         calculated_unit_cost = tot_price / tot_qty if tot_qty > 0 else 0.0
         st.info(f"💡 ทุนต่อหน่วย = **฿{calculated_unit_cost:,.2f}** บาท")
@@ -318,42 +319,66 @@ with tab3:
         btn_add_lot = st.form_submit_button("บันทึกเข้าสต็อก", use_container_width=True)
 
         if btn_add_lot:
-          p_id = [p["product_id"] for p in prods if p["product_name"] == p_name][0]
-          lot_id = f"LOT-{int(datetime.datetime.now().timestamp())}"
+          if tot_price <= 0:
+            st.error("กรุณากรอกราคารวมที่ซื้อมาด้วยครับ")
+          else:
+            p_id = [p["product_id"] for p in prods if p["product_name"] == p_name][0]
+            lot_id = f"LOT-{int(datetime.datetime.now().timestamp())}"
 
-          supabase.table("stock_lots").insert({
-              "lot_id": lot_id,
-              "product_id": p_id,
-              "buy_date": str(buy_date),
-              "supplier": supplier,
-              "total_price": tot_price,
-              "total_qty": tot_qty,
-              "unit_cost": calculated_unit_cost,
-              "remaining_qty": tot_qty,
-          }).execute()
+            supabase.table("stock_lots").insert({
+                "lot_id": lot_id,
+                "product_id": p_id,
+                "buy_date": str(buy_date),
+                "supplier": supplier,
+                "total_price": tot_price,
+                "total_qty": tot_qty,
+                "unit_cost": calculated_unit_cost,
+                "remaining_qty": tot_qty,
+            }).execute()
 
-          st.success(f"เพิ่มสต็อก {p_name} เรียบร้อย!")
-          st.rerun()
+            st.toast(f"✅ เพิ่มสต็อก {p_name} สำเร็จ!", icon="📦")
+            st.success(f"บันทึกรับสต็อก {p_name} จำนวน {tot_qty} หน่วย เรียบร้อยแล้ว")
+            st.rerun()
 
   with sub_tab2:
-    with st.form("add_product_form"):
-      new_p_name = st.text_input("ชื่อสินค้าใหม่")
+    st.markdown("##### ➕ เพิ่มชื่อสินค้าใหม่")
+    with st.form("add_product_form", clear_on_submit=True):
+      new_p_name = st.text_input("ชื่อสินค้าใหม่", placeholder="เช่น กาแฟซอง, แก้วกระดาษ")
       new_unit = st.selectbox("หน่วยนับ", ["ขวด", "ซอง", "ห่อ", "ชิ้น", "กล่อง", "ใบ"])
-      default_sell_price = st.number_input("ราคาขายตั้งต้น (บาท)", min_value=0.0, value=15.0)
+      default_sell_price = st.number_input("ราคาขายตั้งต้น (บาท)", min_value=0.0, value=0.0, step=1.0)
 
       btn_add_prod = st.form_submit_button("เพิ่มสินค้า", use_container_width=True)
 
-      if btn_add_prod and new_p_name:
-        new_p_id = f"P-{int(datetime.datetime.now().timestamp())}"
-        supabase.table("products").insert({
-            "product_id": new_p_id,
-            "product_name": new_p_name,
-            "unit": new_unit,
-            "selling_price": default_sell_price,
-        }).execute()
+      if btn_add_prod:
+        if not new_p_name.strip():
+          st.error("กรุณาพิมพ์ชื่อสินค้าก่อนกดบันทึกครับ")
+        else:
+          new_p_id = f"P-{int(datetime.datetime.now().timestamp())}"
+          supabase.table("products").insert({
+              "product_id": new_p_id,
+              "product_name": new_p_name.strip(),
+              "unit": new_unit,
+              "selling_price": default_sell_price,
+          }).execute()
 
-        st.success(f"เพิ่มสินค้า '{new_p_name}' เรียบร้อย")
-        st.rerun()
+          st.toast(f"✅ เพิ่มสินค้า '{new_p_name}' แล้ว!", icon="✨")
+          st.success(f"เพิ่มสินค้า '{new_p_name}' เรียบร้อยแล้ว (ฟอร์มล้างค่าว่างพร้อมบันทึกต่อ)")
+          st.rerun()
+
+    st.markdown("---")
+    st.markdown("##### 🗑️ รายชื่อสินค้าในระบบ (กดลบได้)")
+    all_prods = supabase.table("products").select("*").execute().data
+    if all_prods:
+      for p in all_prods:
+        col_name, col_del = st.columns([3, 1])
+        col_name.write(f"• **{p['product_name']}** ({p['unit']}) - {p['selling_price']}บ.")
+        if col_del.button("🗑️ ลบ", key=f"del_{p['product_id']}", use_container_width=True):
+          # ลบออกจาก Supabase
+          supabase.table("products").delete().eq("product_id", p["product_id"]).execute()
+          st.toast(f"ลบ {p['product_name']} แล้ว", icon="🗑️")
+          st.rerun()
+    else:
+      st.info("ยังไม่มีรายชื่อสินค้าในระบบ")
 
 # ---------------------------------------------------------
 # TAB 4: ดูสต็อกสินค้าคงเหลือ
