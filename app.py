@@ -142,7 +142,7 @@ if menu == "💰 สรุปงวดกำไร & แบ่งปันผล
     st.info("ยังไม่มีประวัติการตัดรอบแบ่งกำไร")
 
 # ---------------------------------------------------------
-# 4. MENU 2: บันทึกการขายหน้าร้าน
+# 4. MENU 2: บันทึกการขายหน้าร้าน (อัปเดตรองรับตัดสต็อกแก้ว)
 # ---------------------------------------------------------
 elif menu == "🛒 บันทึกการขายหน้าร้าน":
   st.subheader("🛒 บันทึกรายการขายสินค้า")
@@ -160,7 +160,6 @@ elif menu == "🛒 บันทึกการขายหน้าร้าน"
   if not prods:
     st.warning("กรุณาเพิ่มรายการสินค้าในระบบก่อน")
   else:
-    # คำนวณสต็อกรวมที่มีอยู่ของแต่ละสินค้า
     prods_df = pd.DataFrame(prods)
     lots_df = pd.DataFrame(lots) if lots else pd.DataFrame()
 
@@ -174,6 +173,12 @@ elif menu == "🛒 บันทึกการขายหน้าร้าน"
     else:
       prods_df["remaining_qty"] = 0
 
+    # ตรวจสอบหาว่ามีสินค้าชื่อ 'แก้วกระดาษ' ในระบบไหม
+    cup_prod = prods_df[
+        prods_df["product_name"].str.contains("แก้วกระดาษ|แก้ว", na=False)
+    ]
+    cup_available = not cup_prod.empty
+
     with st.form("sale_form"):
       prod_options = {
           row[
@@ -182,7 +187,7 @@ elif menu == "🛒 บันทึกการขายหน้าร้าน"
           for _, row in prods_df.iterrows()
       }
       selected_prod_name = st.selectbox(
-          "เลือกสินค้า",
+          "เลือกสินค้าหลัก",
           options=list(prod_options.keys()),
           format_func=lambda x: prod_options[x],
       )
@@ -195,67 +200,92 @@ elif menu == "🛒 บันทึกการขายหน้าร้าน"
       unit_name = selected_prod["unit"]
       sell_price = float(selected_prod["selling_price"])
 
-      sell_qty = st.number_input(
+      col1, col2 = st.columns(2)
+      sell_qty = col1.number_input(
           f"จำนวนที่ขาย ({unit_name})",
           min_value=1,
           max_value=max(1, available_qty),
           value=1,
       )
-      custom_price = st.number_input(
+      custom_price = col2.number_input(
           "ราคาขายต่อหน่วย (บาท)", min_value=0.0, value=sell_price
       )
 
-      btn_submit_sale = st.form_submit_button("บันทึกการขาย")
+      # Option เพิ่มเติม: แถมแก้วกระดาษไหม?
+      include_cup = False
+      if cup_available:
+        cup_row = cup_prod.iloc[0]
+        cup_rem = int(cup_row["remaining_qty"])
+        include_cup = st.checkbox(
+            f"🥤 รับ 'แก้วกระดาษ' ด้วย (+{sell_qty} ใบ) [สต็อกคงเหลือ: {cup_rem} ใบ]"
+        )
+
+      btn_submit_sale = st.form_submit_button("💾 บันทึกการขาย", type="primary")
 
       if btn_submit_sale:
         if available_qty < sell_qty:
           st.error(f"สินค้าคงเหลือไม่พอขาย (มีอยู่ {available_qty} {unit_name})")
         else:
-          # ตัดสต็อก FIFO
-          qty_to_sell = sell_qty
-          avail_lots = [
-              lot for lot in lots if lot["product_id"] == p_id
-          ]  # เรียงตาม buy_date อยู่แล้ว
+          # ฟังก์ชันตัดสต็อก FIFO แยกรายสินค้า
+          def deduct_stock_fifo(prod_id, qty_needed):
+            avail_lots = [lot for lot in lots if lot["product_id"] == prod_id]
+            used_lots_cost = 0.0
+            remaining_to_deduct = qty_needed
 
-          for lot in avail_lots:
-            if qty_to_sell <= 0:
-              break
+            for lot in avail_lots:
+              if remaining_to_deduct <= 0:
+                break
+              lot_id = lot["lot_id"]
+              lot_rem = int(lot["remaining_qty"])
+              unit_cost = float(lot["unit_cost"])
 
-            lot_id = lot["lot_id"]
-            lot_rem = int(lot["remaining_qty"])
-            unit_cost = float(lot["unit_cost"])
+              take_qty = min(remaining_to_deduct, lot_rem)
+              used_lots_cost += take_qty * unit_cost
 
-            take_qty = min(qty_to_sell, lot_rem)
-            tot_sales = take_qty * custom_price
-            tot_cost = take_qty * unit_cost
-            net_prof = tot_sales - tot_cost
+              # อัปเดตใน stock_lots
+              supabase.table("stock_lots").update(
+                  {"remaining_qty": lot_rem - take_qty}
+              ).eq("lot_id", lot_id).execute()
+              remaining_to_deduct -= take_qty
 
-            # 1. อัปเดตจำนวนคงเหลือใน stock_lots
-            new_rem = lot_rem - take_qty
-            supabase.table("stock_lots").update(
-                {"remaining_qty": new_rem}
-            ).eq("lot_id", lot_id).execute()
+            return used_lots_cost
 
-            # 2. บันทึกลงตาราง sales
-            sale_id = f"SALE-{int(datetime.datetime.now().timestamp())}-{take_qty}"
-            supabase.table("sales").insert({
-                "sale_id": sale_id,
-                "product_id": p_id,
-                "product_name": selected_prod_name,
-                "lot_id": lot_id,
-                "qty": take_qty,
-                "unit_cost": unit_cost,
-                "selling_price": custom_price,
-                "total_sales": tot_sales,
-                "total_cost": tot_cost,
-                "net_profit": net_prof,
-                "settled": False,
-            }).execute()
+          # 1. ตัดสต็อกสินค้าหลัก
+          main_cost = deduct_stock_fifo(p_id, sell_qty)
 
-            qty_to_sell -= take_qty
+          # 2. ถ้ามีตัดสต็อกแก้วกระดาษเพิ่ม
+          cup_cost = 0.0
+          if include_cup and cup_available:
+            cup_p_id = cup_prod.iloc[0]["product_id"]
+            cup_cost = deduct_stock_fifo(cup_p_id, sell_qty)
+
+          # 3. บันทึกลงตาราง sales
+          tot_sales = sell_qty * custom_price
+          tot_cost = main_cost + cup_cost
+          net_prof = tot_sales - tot_cost
+
+          sale_id = f"SALE-{int(datetime.datetime.now().timestamp())}"
+          sale_item_name = (
+              f"{selected_prod_name} (+แก้ว)"
+              if include_cup
+              else selected_prod_name
+          )
+
+          supabase.table("sales").insert({
+              "sale_id": sale_id,
+              "product_id": p_id,
+              "product_name": sale_item_name,
+              "qty": sell_qty,
+              "unit_cost": tot_cost / sell_qty if sell_qty > 0 else 0,
+              "selling_price": custom_price,
+              "total_sales": tot_sales,
+              "total_cost": tot_cost,
+              "net_profit": net_prof,
+              "settled": False,
+          }).execute()
 
           st.success(
-              f"บันทึกขาย {selected_prod_name} จำนวน {sell_qty} {unit_name} เรียบร้อย!"
+              f"บันทึกขาย {sale_item_name} จำนวน {sell_qty} {unit_name} เรียบร้อย!"
           )
           st.rerun()
 
@@ -289,7 +319,7 @@ elif menu == "📥 บันทึกรับสินค้าเข้าส�
             "ราคารวมที่ซื้อมาทั้งหมด (บาท)", min_value=0.0, value=450.0
         )
         tot_qty = col_d.number_input(
-            "จำนวนทั้งหมดที่ได้ (ขวด/ซอง/ห่อ/ชิ้น)", min_value=1, value=50
+            "จำนวนทั้งหมดที่ได้ (ขวด/ซอง/ห่อ/ชิ้น/ใบ)", min_value=1, value=50
         )
 
         calculated_unit_cost = tot_price / tot_qty if tot_qty > 0 else 0.0
@@ -325,7 +355,7 @@ elif menu == "📥 บันทึกรับสินค้าเข้าส�
     with st.form("add_product_form"):
       new_p_name = st.text_input("ชื่อสินค้าใหม่")
       new_unit = st.selectbox(
-          "หน่วยนับ", ["ขวด", "ซอง", "ห่อ", "ชิ้น", "กล่อง", "กระป๋อง"]
+          "หน่วยนับ", ["ขวด", "ซอง", "ห่อ", "ชิ้น", "กล่อง", "กระป๋อง", "ใบ"]
       )
       default_sell_price = st.number_input(
           "ราคาขายตั้งต้นหน้าร้าน (บาท)", min_value=0.0, value=15.0
