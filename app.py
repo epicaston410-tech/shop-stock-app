@@ -395,9 +395,10 @@ with tab4:
     # รวมตารางเอาชื่อสินค้ามาแสดง
     merged = pd.merge(lots_df, prods_df, on="product_id", how="left")
 
-    # เลือกเฉพาะคอลัมน์: ชื่อสินค้า, แหล่งซื้อ, จำนวนรับเข้า, จำนวนคงเหลือ, หน่วย
+    # เลือกคอลัมน์: ชื่อสินค้า, ราคาทุน/หน่วย, แหล่งซื้อ, จำนวนรับเข้า, จำนวนคงเหลือ, หน่วย
     display_df = merged[[
         "product_name",
+        "unit_cost",
         "supplier",
         "total_qty",
         "remaining_qty",
@@ -406,13 +407,15 @@ with tab4:
 
     display_df.columns = [
         "ชื่อสินค้า",
+        "ทุน/หน่วย",
         "ซื้อจาก",
         "จำนวนรับเข้า",
         "จำนวนคงเหลือ",
         "หน่วย",
     ]
 
-    # จัดรูปแบบตัวเลขให้เป็นจำนวนเต็ม
+    # จัดรูปแบบตัวเลขให้อ่านง่าย
+    display_df["ทุน/หน่วย"] = display_df["ทุน/หน่วย"].map("฿{:,.2f}".format)
     display_df["จำนวนรับเข้า"] = display_df["จำนวนรับเข้า"].astype(int)
     display_df["จำนวนคงเหลือ"] = display_df["จำนวนคงเหลือ"].astype(int)
     display_df["ซื้อจาก"] = display_df["ซื้อจาก"].fillna("-")
