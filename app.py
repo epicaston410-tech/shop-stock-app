@@ -67,7 +67,7 @@ tab1, tab2, tab3, tab4 = st.tabs(
 )
 
 # ---------------------------------------------------------
-# TAB 1: สรุปงวดกำไร & แบ่งปันผล
+# TAB 1: สรุปงวดกำไร & แบ่งปันผล + ยกเลิกรายการขาย
 # ---------------------------------------------------------
 with tab1:
   st.subheader("💰 สรุปงวดปัจจุบัน (ยังไม่ตัดรอบ)")
@@ -140,7 +140,7 @@ with tab1:
       st.success(f"ตัดรอบสำเร็จ! แบ่งปันผลคนละ ฿{profit_per_person:,.2f}")
       st.rerun()
 
-  st.caption("⚡ การตัดรอบจะรีเซ็ทยอดกำไรเป็น 0 เริ่มนับใหม่ แตสต็อกสินค้าคงเหลือเท่าเดิม")
+  st.caption("⚡ การตัดรอบจะรีเซ็ทยอดกำไรเป็น 0 เริ่มนับใหม่ แต่สต็อกสินค้าคงเหลือเท่าเดิม")
 
   st.markdown("---")
   st.subheader("📋 รายการขายงวดนี้")
@@ -165,6 +165,51 @@ with tab1:
     sales_display["กำไรสุทธิ"] = sales_display["กำไรสุทธิ"].map("฿{:,.2f}".format)
 
     st.dataframe(sales_display, use_container_width=True, hide_index=True)
+    
+    # ส่วนยกเลิกรายการขายและคืนสต็อก
+    st.markdown("---")
+    st.markdown("##### ❌ ยกเลิกรายการขาย (คืนสต็อกอัตโนมัติ)")
+    sale_options = {
+        row["sale_id"]: f"{row['product_name']} | ขาย {int(row['qty'])} หน่วย | ฿{row['total_sales']:,.2f}"
+        for _, row in current_sales.iterrows()
+    }
+    selected_sale_id = st.selectbox(
+        "เลือกรายการที่ต้องการยกเลิก",
+        options=list(sale_options.keys()),
+        format_func=lambda x: sale_options[x]
+    )
+    
+    if st.button("🗑️ ยืนยันยกเลิกรายการนี้ & คืนสต็อก", type="secondary", use_container_width=True):
+      sale_to_cancel = current_sales[current_sales["sale_id"] == selected_sale_id].iloc[0]
+      p_id = sale_to_cancel["product_id"]
+      qty_to_return = int(sale_to_cancel["qty"])
+      sale_name = sale_to_cancel["product_name"]
+
+      # คืนสต็อกเข้าล็อตล่าสุดของสินค้านั้น
+      lots_res = supabase.table("stock_lots").select("*").eq("product_id", p_id).order("buy_date", desc=True).execute()
+      if lots_res.data:
+        target_lot = lots_res.data[0]
+        new_rem = int(target_lot["remaining_qty"]) + qty_to_return
+        supabase.table("stock_lots").update({"remaining_qty": new_rem}).eq("lot_id", target_lot["lot_id"]).execute()
+
+      # ถ้ามีแถมแก้ว คืนสต็อกแก้วด้วย
+      if "(+แก้ว)" in sale_name:
+        cup_prods = supabase.table("products").select("product_id").ilike("product_name", "%แก้ว%").execute().data
+        if cup_prods:
+          cup_p_id = cup_prods[0]["product_id"]
+          cup_lots = supabase.table("stock_lots").select("*").eq("product_id", cup_p_id).order("buy_date", desc=True).execute().data
+          if cup_lots:
+            cup_target = cup_lots[0]
+            cup_new_rem = int(cup_target["remaining_qty"]) + qty_to_return
+            supabase.table("stock_lots").update({"remaining_qty": cup_new_rem}).eq("lot_id", cup_target["lot_id"]).execute()
+
+      # ลบรายการขายออกจากตาราง
+      supabase.table("sales").delete().eq("sale_id", selected_sale_id).execute()
+
+      st.toast("✅ ยกเลิกรายการและคืนสต็อกเรียบร้อย!", icon="🔄")
+      st.success("ยกเลิกรายการขายและคืนสต็อกเข้าคลังเรียบร้อยแล้วครับ")
+      st.rerun()
+
   else:
     st.info("ยังไม่มีรายการขายในงวดปัจจุบัน")
 
@@ -439,7 +484,7 @@ with tab3:
       st.info("ยังไม่มีรายชื่อสินค้าในระบบ")
 
 # ---------------------------------------------------------
-# TAB 4: ดูสต็อกสินค้าคงเหลือ (จัดระเบียบรวมกลุ่ม + ซ่อนที่หมด)
+# TAB 4: ดูสต็อกสินค้าคงเหลือ
 # ---------------------------------------------------------
 with tab4:
   st.subheader("📦 สต็อกสินค้าคงเหลือ")
@@ -453,7 +498,6 @@ with tab4:
 
     merged = pd.merge(lots_df, prods_df, on="product_id", how="left")
 
-    # คำนวณมูลค่าคงเหลือ
     merged["tot_remaining_value"] = merged["remaining_qty"] * merged["unit_cost"]
     total_inventory_val = merged["tot_remaining_value"].sum()
 
@@ -463,7 +507,6 @@ with tab4:
     view_tab1, view_tab2 = st.tabs(["📊 สรุปรวมตามชื่อสินค้า", "📜 รายละเอียดแยกตามล็อต"])
 
     with view_tab1:
-      # รวมกลุ่มสินค้าชื่อซ้ำให้เหลือบรรทัดเดียว
       summary_stock = merged.groupby("product_name").agg({
           "remaining_qty": "sum",
           "unit": "first",
