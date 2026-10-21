@@ -140,7 +140,7 @@ with tab1:
       st.success(f"ตัดรอบสำเร็จ! แบ่งปันผลคนละ ฿{profit_per_person:,.2f}")
       st.rerun()
 
-  st.caption("⚡ การตัดรอบจะรีเซ็ทยอดกำไรเป็น 0 เริ่มนับใหม่ แต่สต็อกสินค้าคงเหลือเท่าเดิม")
+  st.caption("⚡ การตัดรอบจะรีเซ็ทยอดกำไรเป็น 0 เริ่มนับใหม่ แตสต็อกสินค้าคงเหลือเท่าเดิม")
 
   st.markdown("---")
   st.subheader("📋 รายการขายงวดนี้")
@@ -180,7 +180,7 @@ with tab1:
     st.dataframe(pd.DataFrame(settle_res.data), use_container_width=True)
 
 # ---------------------------------------------------------
-# TAB 2: บันทึกการขายหน้าร้าน (แก้ไขเรื่องราคาดึงค่าตั้งต้นถูกต้อง)
+# TAB 2: บันทึกการขายหน้าร้าน
 # ---------------------------------------------------------
 with tab2:
   st.subheader("🛒 บันทึกรายการขายสินค้า")
@@ -239,7 +239,6 @@ with tab2:
       available_qty = int(selected_row["remaining_qty"])
       unit_name = selected_row["unit"]
 
-      # ดึงราคาขายตั้งต้นของสินค้าให้ถูกต้อง ไม่ให้ติดค่า 0
       raw_price = selected_row.get("selling_price", 0.0)
       sell_price = float(raw_price) if pd.notna(raw_price) and raw_price is not None else 0.0
 
@@ -251,7 +250,6 @@ with tab2:
           max_value=max_limit,
           value=min(1, max_limit),
       )
-      # เอา key ออกเพื่อให้ราคาวิ่งตามสินค้าที่เลือกโดยอัตโนมัติ
       custom_price = col2.number_input(
           "ราคา/หน่วย (บาท)", min_value=0.0, value=sell_price
       )
@@ -339,12 +337,12 @@ with tab2:
           st.rerun()
 
 # ---------------------------------------------------------
-# TAB 3: บันทึกรับสินค้าเข้าสต็อก
+# TAB 3: บันทึกรับสินค้าเข้าสต็อก & แก้ไขชื่อสินค้า
 # ---------------------------------------------------------
 with tab3:
   st.subheader("📥 บันทึกรับสินค้าเข้าสต็อก")
 
-  sub_tab1, sub_tab2 = st.tabs(["ซื้อเข้าสต็อก (ล็อตใหม่)", "เพิ่ม/ลบชื่อสินค้า"])
+  sub_tab1, sub_tab2 = st.tabs(["ซื้อเข้าสต็อก (ล็อตใหม่)", "จัดการชื่อสินค้า (เพิ่ม/แก้/ลบ)"])
 
   with sub_tab1:
     prods = supabase.table("products").select("*").execute().data
@@ -414,26 +412,39 @@ with tab3:
           st.rerun()
 
     st.markdown("---")
-    st.markdown("##### 🗑️ รายชื่อสินค้าในระบบ (กดลบได้)")
+    st.markdown("##### ✏️ แก้ไขชื่อสินค้า / ลบสินค้า")
     all_prods = supabase.table("products").select("*").execute().data
     if all_prods:
       for p in all_prods:
-        col_name, col_del = st.columns([3, 1])
-        col_name.write(f"• **{p['product_name']}** ({p['unit']}) - {p['selling_price']}บ.")
-        if col_del.button("🗑️ ลบ", key=f"del_{p['product_id']}", use_container_width=True):
-          supabase.table("products").delete().eq("product_id", p["product_id"]).execute()
-          st.toast(f"ลบ {p['product_name']} แล้ว", icon="🗑️")
-          st.rerun()
+        with st.expander(f"📦 {p['product_name']} ({p['unit']}) - {p['selling_price']}บ."):
+          edit_name = st.text_input("แก้ไขชื่อสินค้า", value=p['product_name'], key=f"edit_name_{p['product_id']}")
+          edit_price = st.number_input("แก้ไขราคาขาย (บาท)", min_value=0.0, value=float(p['selling_price']), key=f"edit_price_{p['product_id']}")
+          
+          col_save, col_del = st.columns(2)
+          if col_save.button("💾 บันทึกแก้ไข", key=f"save_{p['product_id']}", type="primary", use_container_width=True):
+            supabase.table("products").update({
+                "product_name": edit_name.strip(),
+                "selling_price": edit_price
+            }).eq("product_id", p["product_id"]).execute()
+            st.toast("อัปเดตข้อมูลเรียบร้อย!", icon="✅")
+            st.rerun()
+
+          if col_del.button("🗑️ ลบสินค้า", key=f"del_{p['product_id']}", use_container_width=True):
+            target_p_id = p["product_id"]
+            supabase.table("stock_lots").delete().eq("product_id", target_p_id).execute()
+            supabase.table("products").delete().eq("product_id", target_p_id).execute()
+            st.toast(f"ลบ {p['product_name']} แล้ว", icon="🗑️")
+            st.rerun()
     else:
       st.info("ยังไม่มีรายชื่อสินค้าในระบบ")
 
 # ---------------------------------------------------------
-# TAB 4: ดูสต็อกสินค้าคงเหลือ
+# TAB 4: ดูสต็อกสินค้าคงเหลือ (จัดระเบียบรวมกลุ่ม + ซ่อนที่หมด)
 # ---------------------------------------------------------
 with tab4:
   st.subheader("📦 สต็อกสินค้าคงเหลือ")
 
-  lots_res = supabase.table("stock_lots").select("*").execute()
+  lots_res = supabase.table("stock_lots").select("*").gt("remaining_qty", 0).execute()
   prods_res = supabase.table("products").select("*").execute()
 
   if lots_res.data and prods_res.data:
@@ -442,55 +453,64 @@ with tab4:
 
     merged = pd.merge(lots_df, prods_df, on="product_id", how="left")
 
-    # คำนวณมูลค่าคงเหลือของแต่ละล็อต
+    # คำนวณมูลค่าคงเหลือ
     merged["tot_remaining_value"] = merged["remaining_qty"] * merged["unit_cost"]
     total_inventory_val = merged["tot_remaining_value"].sum()
 
     st.metric("💰 มูลค่าเงินลงทุนสินค้าคงเหลือรวม", f"฿{total_inventory_val:,.2f}")
     st.markdown("---")
 
-    if "buy_date" not in merged.columns:
-      merged["buy_date"] = "-"
+    view_tab1, view_tab2 = st.tabs(["📊 สรุปรวมตามชื่อสินค้า", "📜 รายละเอียดแยกตามล็อต"])
 
-    display_df = merged[[
-        "product_name",
-        "buy_date",
-        "unit_cost",
-        "supplier",
-        "total_qty",
-        "remaining_qty",
-        "unit",
-    ]].copy()
+    with view_tab1:
+      # รวมกลุ่มสินค้าชื่อซ้ำให้เหลือบรรทัดเดียว
+      summary_stock = merged.groupby("product_name").agg({
+          "remaining_qty": "sum",
+          "unit": "first",
+          "tot_remaining_value": "sum"
+      }).reset_index()
 
-    display_df.columns = [
-        "ชื่อสินค้า",
-        "วันที่ซื้อ",
-        "ทุน/หน่วย",
-        "ซื้อจาก",
-        "จำนวนรับเข้า",
-        "จำนวนคงเหลือ",
-        "หน่วย",
-    ]
+      summary_stock.columns = ["ชื่อสินค้า", "จำนวนคงเหลือรวม", "หน่วย", "มูลค่าคงเหลือ"]
+      summary_stock["จำนวนคงเหลือรวม"] = summary_stock["จำนวนคงเหลือรวม"].astype(int)
+      summary_stock["มูลค่าคงเหลือ"] = summary_stock["มูลค่าคงเหลือ"].map("฿{:,.2f}".format)
 
-    display_df["ทุน/หน่วย"] = display_df["ทุน/หน่วย"].map("฿{:,.2f}".format)
-    display_df["จำนวนรับเข้า"] = display_df["จำนวนรับเข้า"].astype(int)
-    display_df["จำนวนคงเหลือ"] = display_df["จำนวนคงเหลือ"].astype(int)
-    display_df["ซื้อจาก"] = display_df["ซื้อจาก"].fillna("-")
-    display_df["วันที่ซื้อ"] = display_df["วันที่ซื้อ"].fillna("-")
+      st.dataframe(
+          summary_stock,
+          use_container_width=True,
+          hide_index=True
+      )
 
-    st.dataframe(
-        display_df,
-        use_container_width=True,
-        hide_index=True,
-        column_order=[
-            "ชื่อสินค้า",
-            "วันที่ซื้อ",
-            "ทุน/หน่วย",
-            "ซื้อจาก",
-            "จำนวนรับเข้า",
-            "จำนวนคงเหลือ",
-            "หน่วย",
-        ],
-    )
+    with view_tab2:
+      display_df = merged[[
+          "product_name",
+          "buy_date",
+          "unit_cost",
+          "supplier",
+          "total_qty",
+          "remaining_qty",
+          "unit",
+      ]].copy()
+
+      display_df.columns = [
+          "ชื่อสินค้า",
+          "วันที่ซื้อ",
+          "ทุน/หน่วย",
+          "ซื้อจาก",
+          "จำนวนรับเข้า",
+          "จำนวนคงเหลือ",
+          "หน่วย",
+      ]
+
+      display_df["ทุน/หน่วย"] = display_df["ทุน/หน่วย"].map("฿{:,.2f}".format)
+      display_df["จำนวนรับเข้า"] = display_df["จำนวนรับเข้า"].astype(int)
+      display_df["จำนวนคงเหลือ"] = display_df["จำนวนคงเหลือ"].astype(int)
+      display_df["ซื้อจาก"] = display_df["ซื้อจาก"].fillna("-")
+      display_df["วันที่ซื้อ"] = display_df["วันที่ซื้อ"].fillna("-")
+
+      st.dataframe(
+          display_df,
+          use_container_width=True,
+          hide_index=True
+      )
   else:
-    st.info("ยังไม่มีข้อมูลสต็อกสินค้า")
+    st.info("ไม่มีสินค้าคงเหลือในสต็อก")
