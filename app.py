@@ -180,7 +180,7 @@ with tab1:
     st.dataframe(pd.DataFrame(settle_res.data), use_container_width=True)
 
 # ---------------------------------------------------------
-# TAB 2: บันทึกการขายหน้าร้าน (แก้ไขแบบไม่ใช้ Form เพื่อแก้ปัญหามือถือ)
+# TAB 2: บันทึกการขายหน้าร้าน (แก้ไขเรื่องราคาดึงค่าตั้งต้นถูกต้อง)
 # ---------------------------------------------------------
 with tab2:
   st.subheader("🛒 บันทึกรายการขายสินค้า")
@@ -238,7 +238,10 @@ with tab2:
       
       available_qty = int(selected_row["remaining_qty"])
       unit_name = selected_row["unit"]
-      sell_price = float(selected_row["selling_price"])
+
+      # ดึงราคาขายตั้งต้นของสินค้าให้ถูกต้อง ไม่ให้ติดค่า 0
+      raw_price = selected_row.get("selling_price", 0.0)
+      sell_price = float(raw_price) if pd.notna(raw_price) and raw_price is not None else 0.0
 
       col1, col2 = st.columns(2)
       max_limit = max(1, available_qty)
@@ -247,11 +250,10 @@ with tab2:
           min_value=1,
           max_value=max_limit,
           value=min(1, max_limit),
-          key="sell_qty_input"
       )
+      # เอา key ออกเพื่อให้ราคาวิ่งตามสินค้าที่เลือกโดยอัตโนมัติ
       custom_price = col2.number_input(
-          "ราคา/หน่วย (บาท)", min_value=0.0, value=sell_price,
-          key="custom_price_input"
+          "ราคา/หน่วย (บาท)", min_value=0.0, value=sell_price
       )
 
       include_cup = False
@@ -259,8 +261,7 @@ with tab2:
         cup_row = cup_prod.iloc[0]
         cup_rem = int(cup_row["remaining_qty"])
         include_cup = st.checkbox(
-            f"🥤 รับ 'แก้วกระดาษ' ด้วย (+{sell_qty} ใบ) [คงเหลือ: {cup_rem} ใบ]",
-            key="include_cup_checkbox"
+            f"🥤 รับ 'แก้วกระดาษ' ด้วย (+{sell_qty} ใบ) [คงเหลือ: {cup_rem} ใบ]"
         )
 
       btn_submit_sale = st.button("💾 บันทึกการขาย", type="primary", use_container_width=True)
