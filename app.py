@@ -145,7 +145,27 @@ with tab1:
   st.markdown("---")
   st.subheader("📋 รายการขายงวดนี้")
   if not current_sales.empty:
-    st.dataframe(current_sales, use_container_width=True)
+    # จัดรูปทรงตารางรายการขายให้สะอาดตา
+    sales_display = current_sales[[
+        "product_name",
+        "qty",
+        "selling_price",
+        "total_sales",
+        "net_profit",
+    ]].copy()
+    sales_display.columns = [
+        "ชื่อสินค้า",
+        "จำนวนขาย",
+        "ราคาขาย/หน่วย",
+        "ยอดขายรวม",
+        "กำไรสุทธิ",
+    ]
+    sales_display["จำนวนขาย"] = sales_display["จำนวนขาย"].astype(int)
+    sales_display["ราคาขาย/หน่วย"] = sales_display["ราคาขาย/หน่วย"].map("฿{:,.2f}".format)
+    sales_display["ยอดขายรวม"] = sales_display["ยอดขายรวม"].map("฿{:,.2f}".format)
+    sales_display["กำไรสุทธิ"] = sales_display["กำไรสุทธิ"].map("฿{:,.2f}".format)
+
+    st.dataframe(sales_display, use_container_width=True, hide_index=True)
   else:
     st.info("ยังไม่มีรายการขายในงวดปัจจุบัน")
 
@@ -255,12 +275,18 @@ with tab2:
               lot_rem = int(lot["remaining_qty"])
               unit_cost = float(lot["unit_cost"])
 
+              if lot_rem <= 0:
+                continue
+
               take_qty = min(remaining_to_deduct, lot_rem)
               used_lots_cost += take_qty * unit_cost
 
+              new_rem = lot_rem - take_qty
               supabase.table("stock_lots").update(
-                  {"remaining_qty": lot_rem - take_qty}
+                  {"remaining_qty": new_rem}
               ).eq("lot_id", lot_id).execute()
+              lot["remaining_qty"] = new_rem
+
               remaining_to_deduct -= take_qty
 
             return used_lots_cost
@@ -411,6 +437,9 @@ with tab4:
     st.metric("💰 มูลค่าเงินลงทุนสินค้าคงเหลือรวม", f"฿{total_inventory_val:,.2f}")
     st.markdown("---")
 
+    if "buy_date" not in merged.columns:
+      merged["buy_date"] = "-"
+
     display_df = merged[[
         "product_name",
         "buy_date",
@@ -435,8 +464,8 @@ with tab4:
     display_df["จำนวนรับเข้า"] = display_df["จำนวนรับเข้า"].astype(int)
     display_df["จำนวนคงเหลือ"] = display_df["จำนวนคงเหลือ"].astype(int)
     display_df["ซื้อจาก"] = display_df["ซื้อจาก"].fillna("-")
+    display_df["วันที่ซื้อ"] = display_df["วันที่ซื้อ"].fillna("-")
 
-    # บังคับให้ Streamlit โชว์ทุกคอลัมน์ตามลำดับนี้ทันที
     st.dataframe(
         display_df,
         use_container_width=True,
