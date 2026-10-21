@@ -411,7 +411,7 @@ with tab4:
     st.metric("💰 มูลค่าเงินลงทุนสินค้าคงเหลือรวม", f"฿{total_inventory_val:,.2f}")
     st.markdown("---")
 
-    # เลือกคอลัมน์รวมวันที่ซื้อด้วย
+    # เพิ่ม "buy_date" เข้าไปในลิสต์ เพื่อดึงวันที่ซื้อมาแสดง
     display_df = merged[[
         "product_name",
         "buy_date",
