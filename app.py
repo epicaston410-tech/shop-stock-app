@@ -411,7 +411,6 @@ with tab4:
     st.metric("💰 มูลค่าเงินลงทุนสินค้าคงเหลือรวม", f"฿{total_inventory_val:,.2f}")
     st.markdown("---")
 
-    # เพิ่ม "buy_date" เข้าไปในลิสต์ เพื่อดึงวันที่ซื้อมาแสดง
     display_df = merged[[
         "product_name",
         "buy_date",
@@ -437,6 +436,20 @@ with tab4:
     display_df["จำนวนคงเหลือ"] = display_df["จำนวนคงเหลือ"].astype(int)
     display_df["ซื้อจาก"] = display_df["ซื้อจาก"].fillna("-")
 
-    st.dataframe(display_df, use_container_width=True, hide_index=True)
+    # บังคับให้ Streamlit โชว์ทุกคอลัมน์ตามลำดับนี้ทันที
+    st.dataframe(
+        display_df,
+        use_container_width=True,
+        hide_index=True,
+        column_order=[
+            "ชื่อสินค้า",
+            "วันที่ซื้อ",
+            "ทุน/หน่วย",
+            "ซื้อจาก",
+            "จำนวนรับเข้า",
+            "จำนวนคงเหลือ",
+            "หน่วย",
+        ],
+    )
   else:
     st.info("ยังไม่มีข้อมูลสต็อกสินค้า")
