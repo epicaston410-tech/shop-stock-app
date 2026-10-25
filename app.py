@@ -222,7 +222,38 @@ with tab1:
       .execute()
   )
   if settle_res.data:
-    st.dataframe(pd.DataFrame(settle_res.data), use_container_width=True)
+    settle_df = pd.DataFrame(settle_res.data)
+    
+    # แปลงวันที่ให้อ่านง่ายขึ้น (ตัดเอาเฉพาะ YYYY-MM-DD HH:MM)
+    if "settle_date" in settle_df.columns:
+      settle_df["settle_date"] = pd.to_datetime(settle_df["settle_date"]).dt.strftime("%Y-%m-%d %H:%M")
+
+    display_settle = settle_df[[
+        "settle_date",
+        "total_sales",
+        "total_cost",
+        "net_profit",
+        "profit_per_partner",
+    ]].copy()
+
+    display_settle.columns = [
+        "วันที่ตัดรอบ",
+        "ยอดขายรวม",
+        "ต้นทุนรวม",
+        "กำไรสุทธิ",
+        "แบ่งคนละ (50%)",
+    ]
+
+    for col in ["ยอดขายรวม", "ต้นทุนรวม", "กำไรสุทธิ", "แบ่งคนละ (50%)"]:
+      display_settle[col] = display_settle[col].map("฿{:,.2f}".format)
+
+    st.dataframe(
+        display_settle,
+        use_container_width=True,
+        hide_index=True
+    )
+  else:
+    st.info("ยังไม่มีประวัติการตัดรอบ")
 
 # ---------------------------------------------------------
 # TAB 2: บันทึกการขายหน้าร้าน
