@@ -419,19 +419,24 @@ with tab3:
   sub_tab1, sub_tab2 = st.tabs(["ซื้อเข้าสต็อก (ล็อตใหม่)", "จัดการชื่อสินค้า (เพิ่ม/แก้/ลบ)"])
 
   with sub_tab1:
+    if st.session_state.get("reset_lot_qty_price"):
+      st.session_state["lot_tot_price"] = 0.0
+      st.session_state["lot_tot_qty"] = 1
+      st.session_state["reset_lot_qty_price"] = False
+
     prods = supabase.table("products").select("*").execute().data
     if not prods:
       st.warning("กรุณาเพิ่มชื่อสินค้าใหม่ก่อน")
     else:
-      prod_names = [p["product_name"] for p in prods]
-      p_name = st.selectbox("เลือกสินค้า", prod_names)
+      prod_names = sorted([p["product_name"] for p in prods])
+      p_name = st.selectbox("เลือกสินค้า", prod_names, key="lot_prod_select")
 
       buy_date = st.date_input("วันที่รับเข้า", datetime.date.today())
-      supplier = st.text_input("แหล่งซื้อ", "")
+      supplier = st.text_input("แหล่งซื้อ", key="lot_supplier")
 
       col_c, col_d = st.columns(2)
-      tot_price = col_c.number_input("ราคารวม (บาท)", min_value=0.0, value=0.0, step=10.0)
-      tot_qty = col_d.number_input("จำนวนที่ได้", min_value=1, value=1)
+      tot_price = col_c.number_input("ราคารวม (บาท)", min_value=0.0, step=10.0, key="lot_tot_price")
+      tot_qty = col_d.number_input("จำนวนที่ได้", min_value=1, key="lot_tot_qty")
 
       calculated_unit_cost = tot_price / tot_qty if tot_qty > 0 else 0.0
       st.info(f"💡 ทุนต่อหน่วย = **฿{calculated_unit_cost:,.2f}** บาท")
@@ -456,6 +461,7 @@ with tab3:
               "remaining_qty": tot_qty,
           }).execute()
 
+          st.session_state["reset_lot_qty_price"] = True
           st.toast(f"✅ เพิ่มสต็อก {p_name} สำเร็จ!", icon="📦")
           st.success(f"บันทึกรับสต็อก {p_name} จำนวน {tot_qty} หน่วย เรียบร้อยแล้ว")
           st.rerun()
