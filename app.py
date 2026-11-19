@@ -28,12 +28,13 @@ st.markdown(
     
     /* สไตล์ปุ่มแท็บเลือกเมนูด้านบน */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 4px;
+        gap: 2px;
+        flex-wrap: wrap;
     }
     .stTabs [data-baseweb="tab"] {
-        padding-left: 8px;
-        padding-right: 8px;
-        font-size: 0.85rem;
+        padding-left: 6px;
+        padding-right: 6px;
+        font-size: 0.8rem;
     }
     
     /* ซ่อนแถบฟุตเตอร์ที่ไม่จำเป็น */
@@ -62,9 +63,13 @@ st.caption("ข้อมูลบันทึกถาวรบน Supabase | �
 # ---------------------------------------------------------
 # 2. MAIN NAVIGATION (ใช้ TABS ด้านบน)
 # ---------------------------------------------------------
-tab1, tab2, tab3, tab4 = st.tabs(
-    ["💰 สรุปกำไร", "🛒 บันทึกขาย", "📥 รับสต็อก", "📦 ดูสต็อก"]
-)
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "💰 สรุปกำไร",
+    "🛒 บันทึกขาย",
+    "📥 รับสต็อก",
+    "📦 ดูสต็อก",
+    "📜 ประวัติซื้อ",
+])
 
 # ---------------------------------------------------------
 # TAB 1: สรุปงวดกำไร & แบ่งปันผล + ยกเลิกรายการขาย
@@ -72,7 +77,6 @@ tab1, tab2, tab3, tab4 = st.tabs(
 with tab1:
   st.subheader("💰 สรุปงวดปัจจุบัน (ยังไม่ตัดรอบ)")
 
-  # คำนวณยอดขาย/กำไรในงวดปัจจุบัน
   response = (
       supabase.table("sales").select("*").eq("settled", False).execute()
   )
@@ -96,7 +100,6 @@ with tab1:
   )
   profit_per_person = net_profit / 2.0
 
-  # คำนวณมูลค่าเงินลงทุนคงเหลือในสต็อกทั้งหมด
   lots_res = supabase.table("stock_lots").select("*").gt("remaining_qty", 0).execute()
   lots_data = lots_res.data if lots_res.data else []
   stock_inventory_value = sum(
@@ -165,8 +168,7 @@ with tab1:
     sales_display["กำไรสุทธิ"] = sales_display["กำไรสุทธิ"].map("฿{:,.2f}".format)
 
     st.dataframe(sales_display, use_container_width=True, hide_index=True)
-    
-    # ส่วนยกเลิกรายการขายและคืนสต็อก
+
     st.markdown("---")
     st.markdown("##### ❌ ยกเลิกรายการขาย (คืนสต็อกอัตโนมัติ)")
     sale_options = {
@@ -178,21 +180,19 @@ with tab1:
         options=list(sale_options.keys()),
         format_func=lambda x: sale_options[x]
     )
-    
+
     if st.button("🗑️ ยืนยันยกเลิกรายการนี้ & คืนสต็อก", type="secondary", use_container_width=True):
       sale_to_cancel = current_sales[current_sales["sale_id"] == selected_sale_id].iloc[0]
       p_id = sale_to_cancel["product_id"]
       qty_to_return = int(sale_to_cancel["qty"])
       sale_name = sale_to_cancel["product_name"]
 
-      # คืนสต็อกเข้าล็อตล่าสุดของสินค้านั้น
       lots_res = supabase.table("stock_lots").select("*").eq("product_id", p_id).order("buy_date", desc=True).execute()
       if lots_res.data:
         target_lot = lots_res.data[0]
         new_rem = int(target_lot["remaining_qty"]) + qty_to_return
         supabase.table("stock_lots").update({"remaining_qty": new_rem}).eq("lot_id", target_lot["lot_id"]).execute()
 
-      # ถ้ามีแถมแก้ว คืนสต็อกแก้วด้วย
       if "(+แก้ว)" in sale_name:
         cup_prods = supabase.table("products").select("product_id").ilike("product_name", "%แก้ว%").execute().data
         if cup_prods:
@@ -203,7 +203,6 @@ with tab1:
             cup_new_rem = int(cup_target["remaining_qty"]) + qty_to_return
             supabase.table("stock_lots").update({"remaining_qty": cup_new_rem}).eq("lot_id", cup_target["lot_id"]).execute()
 
-      # ลบรายการขายออกจากตาราง
       supabase.table("sales").delete().eq("sale_id", selected_sale_id).execute()
 
       st.toast("✅ ยกเลิกรายการและคืนสต็อกเรียบร้อย!", icon="🔄")
@@ -223,8 +222,7 @@ with tab1:
   )
   if settle_res.data:
     settle_df = pd.DataFrame(settle_res.data)
-    
-    # แปลงวันที่ให้อ่านง่ายขึ้น (ตัดเอาเฉพาะ YYYY-MM-DD HH:MM)
+
     if "settle_date" in settle_df.columns:
       settle_df["settle_date"] = pd.to_datetime(settle_df["settle_date"]).dt.strftime("%Y-%m-%d %H:%M")
 
@@ -309,9 +307,9 @@ with tab2:
       selected_row = prods_summary[
           prods_summary["product_name"] == selected_prod_name
       ].iloc[0]
-      
+
       matching_p_ids = prods_df[prods_df["product_name"] == selected_prod_name]["product_id"].tolist()
-      
+
       available_qty = int(selected_row["remaining_qty"])
       unit_name = selected_row["unit"]
 
@@ -347,7 +345,7 @@ with tab2:
           def deduct_stock_fifo_by_names(target_p_ids, qty_needed):
             avail_lots = [lot for lot in lots if lot["product_id"] in target_p_ids]
             avail_lots = sorted(avail_lots, key=lambda x: x.get("buy_date", ""))
-            
+
             used_lots_cost = 0.0
             remaining_to_deduct = qty_needed
 
@@ -495,7 +493,7 @@ with tab3:
         with st.expander(f"📦 {p['product_name']} ({p['unit']}) - {p['selling_price']}บ."):
           edit_name = st.text_input("แก้ไขชื่อสินค้า", value=p['product_name'], key=f"edit_name_{p['product_id']}")
           edit_price = st.number_input("แก้ไขราคาขาย (บาท)", min_value=0.0, value=float(p['selling_price']), key=f"edit_price_{p['product_id']}")
-          
+
           col_save, col_del = st.columns(2)
           if col_save.button("💾 บันทึกแก้ไข", key=f"save_{p['product_id']}", type="primary", use_container_width=True):
             supabase.table("products").update({
@@ -588,3 +586,78 @@ with tab4:
       )
   else:
     st.info("ไม่มีสินค้าคงเหลือในสต็อก")
+
+# ---------------------------------------------------------
+# TAB 5: ประวัติสินค้าที่ซื้อเข้าย้อนหลัง
+# ---------------------------------------------------------
+with tab5:
+  st.subheader("📜 ประวัติการรับซื้อสินค้าย้อนหลัง")
+
+  all_lots_res = supabase.table("stock_lots").select("*").order("buy_date", desc=True).execute()
+  all_prods_res = supabase.table("products").select("*").execute()
+
+  if all_lots_res.data and all_prods_res.data:
+    hist_lots_df = pd.DataFrame(all_lots_res.data)
+    hist_prods_df = pd.DataFrame(all_prods_res.data)
+
+    hist_merged = pd.merge(hist_lots_df, hist_prods_df, on="product_id", how="left")
+    hist_merged["product_name"] = hist_merged["product_name"].fillna("สินค้าที่ถูกลบ")
+    hist_merged["unit"] = hist_merged["unit"].fillna("หน่วย")
+    hist_merged["supplier"] = hist_merged["supplier"].fillna("-")
+    hist_merged["buy_date"] = hist_merged["buy_date"].fillna("-")
+
+    if "total_price" not in hist_merged.columns:
+      hist_merged["total_price"] = hist_merged["total_qty"] * hist_merged["unit_cost"]
+    else:
+      hist_merged["total_price"] = hist_merged["total_price"].fillna(
+          hist_merged["total_qty"] * hist_merged["unit_cost"]
+      )
+
+    filter_options = ["ทั้งหมด"] + sorted(hist_merged["product_name"].unique().tolist())
+    selected_filter = st.selectbox("กรองตามชื่อสินค้า", filter_options, key="buy_history_filter")
+
+    if selected_filter != "ทั้งหมด":
+      filtered_df = hist_merged[hist_merged["product_name"] == selected_filter].copy()
+    else:
+      filtered_df = hist_merged.copy()
+
+    total_buy_spend = float(filtered_df["total_price"].sum()) if not filtered_df.empty else 0.0
+    total_buy_qty = int(filtered_df["total_qty"].sum()) if not filtered_df.empty else 0
+
+    m1, m2 = st.columns(2)
+    m1.metric("ยอดซื้อรวมทั้งหมด", f"฿{total_buy_spend:,.2f}")
+    m2.metric("จำนวนที่รับเข้ารวม", f"{total_buy_qty:,} หน่วย")
+
+    st.markdown("---")
+
+    hist_display = filtered_df[[
+        "buy_date",
+        "product_name",
+        "total_qty",
+        "unit",
+        "unit_cost",
+        "total_price",
+        "supplier",
+    ]].copy()
+
+    hist_display.columns = [
+        "วันที่ซื้อ",
+        "ชื่อสินค้า",
+        "จำนวนที่ซื้อ",
+        "หน่วย",
+        "ราคา/หน่วย",
+        "ราคาที่ซื้อรวม",
+        "แหล่งซื้อ",
+    ]
+
+    hist_display["จำนวนที่ซื้อ"] = hist_display["จำนวนที่ซื้อ"].astype(int)
+    hist_display["ราคา/หน่วย"] = hist_display["ราคา/หน่วย"].map("฿{:,.2f}".format)
+    hist_display["ราคาที่ซื้อรวม"] = hist_display["ราคาที่ซื้อรวม"].map("฿{:,.2f}".format)
+
+    st.dataframe(
+        hist_display,
+        use_container_width=True,
+        hide_index=True,
+    )
+  else:
+    st.info("ยังไม่มีประวัติการรับซื้อสินค้า")
